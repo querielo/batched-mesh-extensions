@@ -1,21 +1,61 @@
 import { createRadixSort, extendBatchedMeshPrototype, getBatchedMeshLODCount } from '@three.ez/batched-mesh-extensions';
-import { Main, PerspectiveCameraAuto } from '@three.ez/main';
+import { Main, OrthographicCameraAuto, PerspectiveCameraAuto } from '@three.ez/main';
 import { performanceRangeLOD, simplifyGeometriesByErrorLOD } from '@three.ez/simplify-geometry';
-import { AmbientLight, BatchedMesh, Color, DirectionalLight, Fog, Matrix4, MeshStandardMaterial, Quaternion, Scene, TorusKnotGeometry, Vector3, WebGLCoordinateSystem } from 'three';
+import { AmbientLight, BatchedMesh, Color, DirectionalLight, Fog, Matrix4, MeshStandardMaterial, OrthographicCamera, Quaternion, Scene, SphereGeometry, TorusKnotGeometry, Vector3, WebGLCoordinateSystem } from 'three';
 import { MapControls } from 'three/examples/jsm/Addons.js';
+import GUI from 'lil-gui';
 
 // EXTEND BATCHEDMESH PROTOTYPE
 extendBatchedMeshPrototype();
 
 const instancesCount = 500000;
 const camera = new PerspectiveCameraAuto(50, 0.1, 600).translateZ(50).translateY(10);
+const orthographicCamera = new OrthographicCameraAuto();
+orthographicCamera.zoom = 0.1;
 const scene = new Scene();
 scene.fog = new Fog(0x000000, 500, 600);
 const main = new Main(); // init renderer and other stuff
-main.createView({ scene, camera, enabled: false });
+const mainView = main.createView({ scene, camera, enabled: false });
 
 const controls = new MapControls(camera, main.renderer.domElement);
 scene.on('animate', (e) => controls.update(e.delta));
+
+const gui = new GUI();
+const settings = {
+  cameraType: 'perspective'
+};
+
+// Handle the camera switching logic
+function switchCamera(type: 'perspective' | 'orthographic'): void {
+  const previousCamera = mainView.camera;
+
+  if (type === 'orthographic') {
+    mainView.camera = orthographicCamera;
+    controls.object = orthographicCamera;
+
+    // Disable rotation and lock the camera to a top-down view.
+    controls.enableRotate = false;
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = 0;
+  } else {
+    mainView.camera = camera;
+    controls.object = camera;
+
+    // Re-enable rotation and reset angle limits for free orbiting.
+    controls.enableRotate = true;
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = Math.PI;
+  }
+
+  mainView.camera.position.copy(previousCamera.position);
+  mainView.camera.quaternion.copy(previousCamera.quaternion);
+
+  controls.update();
+}
+
+gui.add(settings, 'cameraType', ['perspective', 'orthographic'])
+  .name('Camera Type')
+  .onChange(switchCamera);
 
 const geometries = [
   new TorusKnotGeometry(1, 0.4, 256, 32, 1, 1),
@@ -33,6 +73,7 @@ const geometries = [
 // CREATE SIMPLIFIED GEOMETRIES
 
 const geometriesLODArray = await simplifyGeometriesByErrorLOD(geometries, 4, performanceRangeLOD);
+console.log('performanceRangeLOD', performanceRangeLOD);
 
 // CREATE BATCHED MESH
 
@@ -45,10 +86,10 @@ batchedMesh.customSort = createRadixSort(batchedMesh);
 for (let i = 0; i < geometriesLODArray.length; i++) {
   const geometryLOD = geometriesLODArray[i];
   const geometryId = batchedMesh.addGeometry(geometryLOD[0], -1, LODIndexCount[i]);
-  batchedMesh.addGeometryLOD(geometryId, geometryLOD[1], 15);
-  batchedMesh.addGeometryLOD(geometryId, geometryLOD[2], 75);
-  batchedMesh.addGeometryLOD(geometryId, geometryLOD[3], 125);
-  batchedMesh.addGeometryLOD(geometryId, geometryLOD[4], 200);
+  batchedMesh.addGeometryLOD(geometryId, geometryLOD[1], 0.50); // use from below 50% of the screen space
+  batchedMesh.addGeometryLOD(geometryId, geometryLOD[2], 0.20); // use below 20%
+  batchedMesh.addGeometryLOD(geometryId, geometryLOD[3], 0.10); // etc
+  batchedMesh.addGeometryLOD(geometryId, geometryLOD[4], 0.05);
 }
 
 // ADD INSTANCES
