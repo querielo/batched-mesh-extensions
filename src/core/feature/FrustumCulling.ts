@@ -4,6 +4,7 @@ import { MultiDrawRenderItem, MultiDrawRenderList } from '../MultiDrawRenderList
 import { sortOpaque, sortTransparent } from '../../utils/SortingUtils.js';
 
 // TODO: fix LOD if no sorting and  no culling
+// TODO: viewSize can be calculate better
 
 /**
  * A custom sorting callback for render items.
@@ -188,9 +189,11 @@ export function BVHCulling(this: BatchedMesh, camera: Camera, cameraLOD: Camera)
   let instancesCount = 0;
 
   const orthographicCamera = camera as OrthographicCamera;
-  const viewHeight = (orthographicCamera.top - orthographicCamera.bottom) / orthographicCamera.zoom;
+  const viewSize = (orthographicCamera.top - orthographicCamera.bottom) / orthographicCamera.zoom;
   const perspectiveCamera = camera as PerspectiveCamera;
   const invProj = (Math.tan(perspectiveCamera.fov * 0.5 * (Math.PI / 180))) ** 2;
+  const useDistanceForLOD = this.useDistanceForLOD;
+  const isPerspectiveCamera = perspectiveCamera.isPerspectiveCamera;
 
   this.bvh.frustumCulling(_projScreenMatrix, (node: BVHNode<{}, number>) => {
     const index = node.object;
@@ -207,16 +210,16 @@ export function BVHCulling(this: BatchedMesh, camera: Camera, cameraLOD: Camera)
 
     if (LOD) {
       _sphere.radius = geometryInfo.boundingSphere.radius;
+
       let metric: number;
-      let LODIndex: number;
-      if ((camera as PerspectiveCamera).isPerspectiveCamera) {
+      if (isPerspectiveCamera) {
         const distance = this.getPositionAt(index).distanceToSquared(_cameraLODPos);
-        metric = getLODMetricPerspective(_sphere, invProj, distance);
-        LODIndex = this.getLODIndex(LOD, metric, true);
+        metric = getLODMetricPerspective(useDistanceForLOD, _sphere, invProj, distance);
       } else {
-        metric = getLODMetricOrthographic(_sphere, viewHeight);
-        LODIndex = this.getLODIndex(LOD, metric, false);
+        metric = getLODMetricOrthographic(useDistanceForLOD, _sphere, viewSize);
       }
+      const LODIndex = this.getLODIndex(LOD, metric, isPerspectiveCamera);
+
       if (onFrustumEnter && !onFrustumEnter(index, camera, cameraLOD, LODIndex)) return;
       start = LOD[LODIndex].start;
       count = LOD[LODIndex].count;
@@ -243,10 +246,13 @@ export function BVHCulling(this: BatchedMesh, camera: Camera, cameraLOD: Camera)
   this._multiDrawCount = sortObjects ? _renderList.array.length : instancesCount;
 }
 
-function getLODMetricPerspective(sphere: Sphere, invProj: number, distance: number): number {
-  return (sphere.radius ** 2) / (distance * invProj);
+function getLODMetricPerspective(useDistanceForLOD: boolean, sphere: Sphere, invProj: number, distance: number): number {
+  return useDistanceForLOD ? distance : ((sphere.radius ** 2) / (distance * invProj));
 }
-function getLODMetricOrthographic(sphere: Sphere, viewHeight: number): number {
+
+function getLODMetricOrthographic(useDistanceForLOD: boolean, sphere: Sphere, viewHeight: number): number {
+  // TODO refactor
+  if (useDistanceForLOD) throw new Error('BatchedMesh: useDistanceForLOD cannot be used with orthographic camera.');
   return sphere.radius * 2 / viewHeight;
 }
 
@@ -265,9 +271,11 @@ export function linearCulling(this: BatchedMesh, camera: Camera, cameraLOD: Came
   _frustum.setFromProjectionMatrix(_projScreenMatrix);
 
   const orthographicCamera = camera as OrthographicCamera;
-  const viewHeight = (orthographicCamera.top - orthographicCamera.bottom) / orthographicCamera.zoom;
+  const viewSize = (orthographicCamera.top - orthographicCamera.bottom) / orthographicCamera.zoom;
   const perspectiveCamera = camera as PerspectiveCamera;
   const invProj = (Math.tan(perspectiveCamera.fov * 0.5 * (Math.PI / 180))) ** 2;
+  const useDistanceForLOD = this.useDistanceForLOD;
+  const isPerspectiveCamera = perspectiveCamera.isPerspectiveCamera;
 
   for (let i = 0, l = instanceInfo.length; i < l; i++) {
     const instance = instanceInfo[i];
@@ -294,16 +302,15 @@ export function linearCulling(this: BatchedMesh, camera: Camera, cameraLOD: Came
     if (!_frustum.intersectsSphere(_sphere)) continue;
 
     if (LOD) {
-      let metric;
-      let LODIndex;
-      if ((camera as PerspectiveCamera).isPerspectiveCamera) {
+      let metric: number;
+      if (isPerspectiveCamera) {
         const distance = _sphere.center.distanceToSquared(_cameraLODPos);
-        metric = getLODMetricPerspective(_sphere, invProj, distance);
-        LODIndex = this.getLODIndex(LOD, metric, true);
+        metric = getLODMetricPerspective(useDistanceForLOD, _sphere, invProj, distance);
       } else {
-        metric = getLODMetricOrthographic(_sphere, viewHeight);
-        LODIndex = this.getLODIndex(LOD, metric, false);
+        metric = getLODMetricOrthographic(useDistanceForLOD, _sphere, viewSize);
       }
+      const LODIndex = this.getLODIndex(LOD, metric, isPerspectiveCamera);
+
       if (onFrustumEnter && !onFrustumEnter(i, camera, cameraLOD, LODIndex)) continue;
       start = LOD[LODIndex].start;
       count = LOD[LODIndex].count;

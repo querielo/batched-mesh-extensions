@@ -1,9 +1,9 @@
 import { createRadixSort, extendBatchedMeshPrototype, getBatchedMeshLODCount } from '@three.ez/batched-mesh-extensions';
 import { Main, OrthographicCameraAuto, PerspectiveCameraAuto } from '@three.ez/main';
-import { performanceRangeLOD, simplifyGeometriesByErrorLOD } from '@three.ez/simplify-geometry';
-import { AmbientLight, BatchedMesh, Color, DirectionalLight, Fog, Matrix4, MeshStandardMaterial, OrthographicCamera, Quaternion, Scene, SphereGeometry, TorusKnotGeometry, Vector3, WebGLCoordinateSystem } from 'three';
-import { MapControls } from 'three/examples/jsm/Addons.js';
-import GUI from 'lil-gui';
+import { performanceRangeLOD, qualityRangeLOD, simplifyGeometriesByErrorLOD } from '@three.ez/simplify-geometry';
+import { AmbientLight, BatchedMesh, Color, DirectionalLight, Fog, Matrix4, MeshStandardMaterial, Quaternion, Scene, TorusKnotGeometry, Vector3, WebGLCoordinateSystem } from 'three';
+import { MapControls } from 'three/addons';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
 // EXTEND BATCHEDMESH PROTOTYPE
 extendBatchedMeshPrototype();
@@ -26,7 +26,7 @@ const settings = {
 };
 
 // Handle the camera switching logic
-function switchCamera(type: 'perspective' | 'orthographic'): void {
+function switchCamera(type: string): void {
   const previousCamera = mainView.camera;
 
   if (type === 'orthographic') {
@@ -72,8 +72,7 @@ const geometries = [
 
 // CREATE SIMPLIFIED GEOMETRIES
 
-const geometriesLODArray = await simplifyGeometriesByErrorLOD(geometries, 4, performanceRangeLOD);
-console.log('performanceRangeLOD', performanceRangeLOD);
+const geometriesLODArray = await simplifyGeometriesByErrorLOD(geometries, 4, qualityRangeLOD);
 
 // CREATE BATCHED MESH
 
@@ -86,10 +85,10 @@ batchedMesh.customSort = createRadixSort(batchedMesh);
 for (let i = 0; i < geometriesLODArray.length; i++) {
   const geometryLOD = geometriesLODArray[i];
   const geometryId = batchedMesh.addGeometry(geometryLOD[0], -1, LODIndexCount[i]);
-  batchedMesh.addGeometryLOD(geometryId, geometryLOD[1], 0.50); // use from below 50% of the screen space
-  batchedMesh.addGeometryLOD(geometryId, geometryLOD[2], 0.20); // use below 20%
-  batchedMesh.addGeometryLOD(geometryId, geometryLOD[3], 0.10); // etc
-  batchedMesh.addGeometryLOD(geometryId, geometryLOD[4], 0.05);
+  batchedMesh.addGeometryLOD(geometryId, geometryLOD[1], 0.20); // use from below 20% of the screen space
+  batchedMesh.addGeometryLOD(geometryId, geometryLOD[2], 0.10); // use below 10%
+  batchedMesh.addGeometryLOD(geometryId, geometryLOD[3], 0.05); // etc
+  batchedMesh.addGeometryLOD(geometryId, geometryLOD[4], 0.02);
 }
 
 // ADD INSTANCES
