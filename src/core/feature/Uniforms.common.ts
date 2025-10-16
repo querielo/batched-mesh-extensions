@@ -1,6 +1,5 @@
 import { BatchedMesh } from 'three';
 import { ChannelSize, SquareDataTexture, UniformMap, UniformMapType, UniformType, UniformValue, UniformValueObj } from '../SquareDataTexture.js';
-import { patchBatchedMeshMaterial } from '../../patch/PatchBatchedMeshMaterial.js';
 
 export type UniformSchema = { [x: string]: UniformType };
 export type UniformSchemaShader = { vertex?: UniformSchema; fragment?: UniformSchema };
@@ -54,15 +53,6 @@ export function setUniformAt(this: BatchedMesh, id: number, name: string, value:
   }
   this.uniformsTexture.setUniformAt(id, name, value);
   this.uniformsTexture.enqueueUpdate(id);
-}
-
-export function initUniformsPerInstance(this: BatchedMesh, schema: UniformSchemaShader): void {
-  if (this.uniformsTexture) throw new Error('"initUniformsPerInstance" must be called only once.');
-
-  const { channels, pixelsPerInstance, uniformMap, fetchInFragmentShader } = getUniformSchemaResult(schema);
-  this.uniformsTexture = new SquareDataTexture(Float32Array, channels, pixelsPerInstance, this.maxInstanceCount, uniformMap, fetchInFragmentShader);
-
-  patchBatchedMeshMaterial(this);
 }
 
 export function getUniformSchemaResult(schema: UniformSchemaShader): UniformSchemaResult {

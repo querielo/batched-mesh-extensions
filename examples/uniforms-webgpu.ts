@@ -1,4 +1,4 @@
-import { extendBatchedMeshPrototype, getBatchedMeshCount } from '@three.ez/batched-mesh-extensions';
+import { extendBatchedMeshPrototype, getBatchedMeshCount } from '../src/index.webgpu.js';
 import { BatchedMesh, BoxGeometry, Color, CylinderGeometry, DirectionalLight, Matrix4, PerspectiveCamera, Scene, SphereGeometry, SRGBColorSpace, AmbientLight } from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import { WebGPURenderer, MeshStandardNodeMaterial } from 'three/webgpu';

@@ -1,5 +1,6 @@
 import { BatchedMesh } from 'three';
-import { getUniformAt, initUniformsPerInstance, setUniformAt } from '../core/feature/Uniforms.js';
+import { getUniformAt, setUniformAt } from '../core/feature/Uniforms.common.js';
+import { initUniformsPerInstance } from '../core/feature/Uniforms.webgl.js';
 import { extendBatchedMeshPrototypeCommon } from './ExtendBatchedMeshPrototype.common.js';
 
 /**

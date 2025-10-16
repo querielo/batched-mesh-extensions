@@ -1,26 +1,27 @@
 import { BatchedMesh } from 'three';
 import type { NodeMaterial } from 'three/webgpu';
 
-async function patchNodeMaterial(batchedMesh: BatchedMesh): Promise<void> {
-  const {
-    uniform,
-    int,
-    ivec2,
-    vec2,
-    vec3,
-    vec4,
-    float,
-    instanceIndex,
-    drawIndex,
-    textureLoad,
-    positionLocal,
-    varying
-  } = await import('three/tsl');
+// Static imports for TSL nodes (WebGPU)
+import {
+  uniform,
+  int,
+  ivec2,
+  vec2,
+  vec3,
+  vec4,
+  float,
+  instanceIndex,
+  drawIndex,
+  textureLoad,
+  positionLocal,
+  varying
+} from 'three/tsl';
 
+function patchNodeMaterial(batchedMesh: BatchedMesh): void {
   const material = batchedMesh.material as NodeMaterial;
 
   const setupMaterial = material.setupPosition.bind(material);
-  material.setupPosition = (builder: any) => {
+  (material as any).setupPosition = (builder: any) => {
     const result = setupMaterial(builder);
 
     if ((batchedMesh as any).uniformsTexture) {
@@ -33,7 +34,14 @@ async function patchNodeMaterial(batchedMesh: BatchedMesh): Promise<void> {
       const hasIndirect = Boolean((batchedMesh as any)._indirectTexture);
       let idx: any;
 
-      const drawId = builder.getDrawIndex() === null ? instanceIndex : drawIndex;
+      let drawId: any = null;
+      if (drawId === null) {
+        if (builder.getDrawIndex() === null) {
+          drawId = instanceIndex;
+        } else {
+          drawId = drawIndex;
+        }
+      }
 
       if (hasIndirect) {
         const indTex: any = (batchedMesh as any)._indirectTexture;
@@ -63,15 +71,13 @@ async function patchNodeMaterial(batchedMesh: BatchedMesh): Promise<void> {
           const tIdx = Math.floor(absolute / channels);
           const cIdx = absolute % channels;
           const t = texels[tIdx] ?? texels[texels.length - 1];
-          comps.push(
-            cIdx === 0 ? (t as any).r : cIdx === 1 ? (t as any).g : cIdx === 2 ? (t as any).b : (t as any).a
-          );
+          comps.push(cIdx === 0 ? (t as any).r : cIdx === 1 ? (t as any).g : cIdx === 2 ? (t as any).b : (t as any).a);
         }
         if (size === 1) return comps[0];
-        if (size === 2) return vec2(comps[0], comps[1]);
+        if (size === 2) return vec2(comps[0], comps[1] ?? float(0));
         if (size === 3) return vec3(comps[0], comps[1], comps[2]);
         // size >= 4
-        return vec4(comps[0], comps[1], comps[2], comps[3]);
+        return vec4(comps[0] ?? float(0), comps[1] ?? float(0), comps[2] ?? float(0), comps[3] ?? float(1));
       };
 
       let anyAssigned = false;
@@ -94,7 +100,7 @@ async function patchNodeMaterial(batchedMesh: BatchedMesh): Promise<void> {
           // treat color as vec3; accept vec4 by dropping alpha
           value = entry.size === 4 ? vec3(node.x, node.y, node.z) : entry.size === 3 ? node : vec3(node, node, node);
         }
-        // fallback logic removed: value is never undefined
+        if (fallback && value === undefined) value = fallback;
         // Force computation in vertex stage and pass via varyings to fragment
         (material as any)[prop] = varying(value);
         anyAssigned = true;
@@ -139,7 +145,7 @@ async function patchNodeMaterial(batchedMesh: BatchedMesh): Promise<void> {
       if (anyAssigned) {
         if (opacityAssigned) (material as any).transparent = true;
         if (!(material as any).positionNode) {
-          const instZero = float(drawId).mul(float(0));
+          const instZero = float((drawId as any)).mul(float(0));
           (material as any).positionNode = positionLocal.add(instZero);
         }
         (material as any).needsUpdate = true;
@@ -148,35 +154,12 @@ async function patchNodeMaterial(batchedMesh: BatchedMesh): Promise<void> {
     return result;
   };
 
-  material.needsUpdate = true;
+  (material as any).needsUpdate = true;
 }
 
-export async function patchBatchedMeshMaterial(batchedMesh: BatchedMesh): Promise<void> {
-  const material = batchedMesh.material;
-
+export function patchBatchedMeshMaterial(batchedMesh: BatchedMesh): void {
+  const material = batchedMesh.material as any;
   if ((material as NodeMaterial).isNodeMaterial) {
-    await patchNodeMaterial(batchedMesh);
-  } else {
-    const onBeforeCompileBase = material.onBeforeCompile.bind(material);
-
-    material.onBeforeCompile = (shader: any, renderer: any) => {
-      if ((batchedMesh as any).uniformsTexture) {
-        shader.uniforms.uniformsTexture = { value: (batchedMesh as any).uniformsTexture };
-        const { vertex, fragment } = (batchedMesh as any).uniformsTexture.getUniformsGLSL(
-          'uniformsTexture',
-          'batchIndex',
-          'float'
-        );
-        shader.vertexShader = shader.vertexShader.replace('void main() {', vertex);
-        shader.fragmentShader = shader.fragmentShader.replace('void main() {', fragment);
-
-        shader.vertexShader = shader.vertexShader.replace(
-          'void main() {',
-          'void main() { float batchIndex = getIndirectIndex( gl_DrawID );'
-        );
-      }
-
-      onBeforeCompileBase(shader, renderer);
-    };
+    patchNodeMaterial(batchedMesh);
   }
 }
