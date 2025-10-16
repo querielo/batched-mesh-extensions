@@ -33,14 +33,7 @@ async function patchNodeMaterial(batchedMesh: BatchedMesh): Promise<void> {
       const hasIndirect = Boolean((batchedMesh as any)._indirectTexture);
       let idx: any;
 
-      let drawId = null;
-      if (drawId === null) {
-        if (builder.getDrawIndex() === null) {
-          drawId = instanceIndex;
-        } else {
-          drawId = drawIndex;
-        }
-      }
+      const drawId = builder.getDrawIndex() === null ? instanceIndex : drawIndex;
 
       if (hasIndirect) {
         const indTex: any = (batchedMesh as any)._indirectTexture;
@@ -75,10 +68,10 @@ async function patchNodeMaterial(batchedMesh: BatchedMesh): Promise<void> {
           );
         }
         if (size === 1) return comps[0];
-        if (size === 2) return vec2(comps[0], comps[1] ?? float(0));
+        if (size === 2) return vec2(comps[0], comps[1]);
         if (size === 3) return vec3(comps[0], comps[1], comps[2]);
         // size >= 4
-        return vec4(comps[0] ?? float(0), comps[1] ?? float(0), comps[2] ?? float(0), comps[3] ?? float(1));
+        return vec4(comps[0], comps[1], comps[2], comps[3]);
       };
 
       let anyAssigned = false;
@@ -101,7 +94,7 @@ async function patchNodeMaterial(batchedMesh: BatchedMesh): Promise<void> {
           // treat color as vec3; accept vec4 by dropping alpha
           value = entry.size === 4 ? vec3(node.x, node.y, node.z) : entry.size === 3 ? node : vec3(node, node, node);
         }
-        if (fallback && value === undefined) value = fallback;
+        // fallback logic removed: value is never undefined
         // Force computation in vertex stage and pass via varyings to fragment
         (material as any)[prop] = varying(value);
         anyAssigned = true;
