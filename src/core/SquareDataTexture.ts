@@ -110,6 +110,11 @@ export class SquareDataTexture extends DataTexture {
   protected _needsUpdate: boolean = false;
   protected _lastWidth: number = null;
 
+  // Read-only accessors for TSL/WGSL integrations
+  public get pixelsPerInstance(): number { return this._pixelsPerInstance; }
+  public get channels(): ChannelSize { return this._channels; }
+  public get uniformMap(): UniformMap { return this._uniformMap; }
+
   /**
    * @param arrayType The constructor for the TypedArray.
    * @param channels The number of channels in the texture.
@@ -171,10 +176,23 @@ export class SquareDataTexture extends DataTexture {
   /**
    * Updates the texture data based on the rows that need updating.
    * This method is optimized to only update the rows that have changed, improving performance.
-   * @param renderer The WebGLRenderer used for rendering.
+   * @param renderer The renderer used for rendering. Supports WebGLRenderer and WebGPURenderer.
    */
-  public update(renderer: WebGLRenderer): void {
-    const textureProperties: any = renderer.properties.get(this);
+  public update(renderer: any): void {
+    // WebGPU fallback: trigger full texture update via public API
+    if (renderer?.isWebGPURenderer) {
+      if (this._needsUpdate) {
+        this.needsUpdate = true; // let Three.js handle the upload via WebGPU path
+        this._lastWidth = this.image.width;
+        this._needsUpdate = false;
+        this._rowToUpdate.fill(false);
+      }
+      return;
+    }
+
+    // WebGL partial updates
+    const glRenderer = renderer as WebGLRenderer;
+    const textureProperties: any = glRenderer.properties.get(this);
     const versionChanged = this.version > 0 && textureProperties.__version !== this.version;
     const sizeChanged = this._lastWidth !== null && this._lastWidth !== this.image.width;
     if (!this._needsUpdate || !textureProperties.__webglTexture || versionChanged || sizeChanged) {
@@ -196,7 +214,7 @@ export class SquareDataTexture extends DataTexture {
     if (rowsInfo.length > this.maxUpdateCalls) {
       this.needsUpdate = true; // three.js will update the whole texture
     } else {
-      this.updateRows(textureProperties, renderer, rowsInfo);
+      this.updateRows(textureProperties, glRenderer, rowsInfo);
     }
 
     this._rowToUpdate.fill(false);

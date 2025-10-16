@@ -38,7 +38,7 @@ myBatchedMesh.computeBVH();
 ```
 
 - [**Spatial indexing (dynamic BVH)**](#spatial-indexing-dynamic-bvh): *speed up raycasting and frustum culling.*
-- [**Per-instance uniforms**](#per-instance-uniforms-webglrenderer-only): *assign unique shader data to individual instances.* (**WebGLRenderer only)**
+- [**Per-instance uniforms**](#per-instance-uniforms-webglrenderer-only): *assign unique shader data to individual instances.*
 - [**Level of Detail (LOD)**](#level-of-detail-lod): *dynamically adjust instance detail based on distance.*
 
 ## Live Examples
@@ -141,7 +141,7 @@ myBatchedMesh.bvh.delete(instanceId);
 myBatchedMesh.bvh.clear();
 ```
 
-### Per-instance uniforms (WebGLRenderer only)
+### Per-instance uniforms
 
 Assign unique shader uniforms to each instance, working with every materials.
 
