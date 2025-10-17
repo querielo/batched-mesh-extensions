@@ -74,10 +74,10 @@ function patchNodeMaterial(batchedMesh: BatchedMesh): void {
           comps.push(cIdx === 0 ? (t as any).r : cIdx === 1 ? (t as any).g : cIdx === 2 ? (t as any).b : (t as any).a);
         }
         if (size === 1) return comps[0];
-        if (size === 2) return vec2(comps[0], comps[1] ?? float(0));
+        if (size === 2) return vec2(comps[0], comps[1]);
         if (size === 3) return vec3(comps[0], comps[1], comps[2]);
         // size >= 4
-        return vec4(comps[0] ?? float(0), comps[1] ?? float(0), comps[2] ?? float(0), comps[3] ?? float(1));
+        return vec4(comps[0], comps[1], comps[2], comps[3]);
       };
 
       let anyAssigned = false;
@@ -141,15 +141,6 @@ function patchNodeMaterial(batchedMesh: BatchedMesh): void {
       // Other useful
       setIf('normal', 'normalNode', 3, 'vec3');
       setIf('ao', 'aoNode', 1, 'float');
-
-      if (anyAssigned) {
-        if (opacityAssigned) (material as any).transparent = true;
-        if (!(material as any).positionNode) {
-          const instZero = float((drawId as any)).mul(float(0));
-          (material as any).positionNode = positionLocal.add(instZero);
-        }
-        (material as any).needsUpdate = true;
-      }
     }
     return result;
   };
