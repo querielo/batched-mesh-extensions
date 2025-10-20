@@ -1,7 +1,5 @@
 import { BatchedMesh } from 'three';
 import type { NodeMaterial } from 'three/webgpu';
-
-// Static imports for TSL nodes (WebGPU)
 import {
   uniform,
   int,
@@ -71,7 +69,9 @@ function patchNodeMaterial(batchedMesh: BatchedMesh): void {
           const tIdx = Math.floor(absolute / channels);
           const cIdx = absolute % channels;
           const t = texels[tIdx] ?? texels[texels.length - 1];
-          comps.push(cIdx === 0 ? (t as any).r : cIdx === 1 ? (t as any).g : cIdx === 2 ? (t as any).b : (t as any).a);
+          comps.push(
+            cIdx === 0 ? (t as any).r : cIdx === 1 ? (t as any).g : cIdx === 2 ? (t as any).b : (t as any).a
+          );
         }
         if (size === 1) return comps[0];
         if (size === 2) return vec2(comps[0], comps[1]);
@@ -79,9 +79,6 @@ function patchNodeMaterial(batchedMesh: BatchedMesh): void {
         // size >= 4
         return vec4(comps[0], comps[1], comps[2], comps[3]);
       };
-
-      let anyAssigned = false;
-      let opacityAssigned = false;
 
       const setIf = (
         key: string,
@@ -98,26 +95,92 @@ function patchNodeMaterial(batchedMesh: BatchedMesh): void {
         if (toType === 'vec3' && entry.size === 4) value = vec3(node.x, node.y, node.z);
         if (toType === 'color') {
           // treat color as vec3; accept vec4 by dropping alpha
-          value = entry.size === 4 ? vec3(node.x, node.y, node.z) : entry.size === 3 ? node : vec3(node, node, node);
+          value
+            = entry.size === 4
+              ? vec3(node.x, node.y, node.z)
+              : entry.size === 3
+                ? node
+                : vec3(node, node, node);
         }
         if (fallback && value === undefined) value = fallback;
         // Force computation in vertex stage and pass via varyings to fragment
         (material as any)[prop] = varying(value);
-        anyAssigned = true;
-        if (prop === 'opacityNode') opacityAssigned = true;
       };
-
-      // Basic
-      setIf('diffuse', 'colorNode', 3, 'vec4'); // vec3 -> vec4(rgb,1)
-      setIf('color', 'colorNode', null, 'vec4');
-      setIf('opacity', 'opacityNode', 1, 'float');
+      const getIf = (
+        key: string,
+        size: number | null,
+        toType: 'float' | 'vec2' | 'vec3' | 'vec4' | 'color' = 'float',
+        fallback?: any
+      ): any => {
+        const entry = map.get(key);
+        if (!entry) return null;
+        const node = pick(entry.offset, size ?? entry.size);
+        let value = node;
+        if (toType === 'vec4' && entry.size === 3) value = vec4(node.x, node.y, node.z, float(1));
+        if (toType === 'vec3' && entry.size === 4) value = vec3(node.x, node.y, node.z);
+        if (toType === 'color') {
+          value
+            = entry.size === 4
+              ? vec3(node.x, node.y, node.z)
+              : entry.size === 3
+                ? node
+                : vec3(node, node, node);
+        }
+        if (fallback && value === undefined) value = fallback;
+        return value;
+      };
+      const assignCombined = (
+        baseKey: string,
+        mapKey: string,
+        prop: string,
+        baseSize: number | null,
+        mapSize: number | null,
+        toType: 'float' | 'vec2' | 'vec3' | 'vec4' | 'color'
+      ): void => {
+        const base = getIf(baseKey, baseSize, toType);
+        const mapNode = getIf(mapKey, mapSize, toType);
+        if (base && mapNode) {
+          (material as any)[prop] = varying((base as any).mul(mapNode));
+        } else if (base) {
+          (material as any)[prop] = varying(base);
+        } else if (mapNode) {
+          (material as any)[prop] = varying(mapNode);
+        }
+      };
+      const scaleNode = getIf('scale', 3, 'vec3');
+      const positionOffsetNode = getIf('positionOffset', 3, 'vec3');
+      const dispBase = getIf('displacement', 1, 'float');
+      const dispScale = getIf('displacementScale', 1, 'float');
+      const dispBias = getIf('displacementBias', 1, 'float');
+      if (scaleNode || positionOffsetNode) {
+        let pos = positionLocal as any;
+        if (scaleNode) pos = pos.mul(scaleNode);
+        if (positionOffsetNode) pos = pos.add(positionOffsetNode);
+        (material as any).positionNode = pos;
+      }
+      if (dispBase || dispScale || dispBias) {
+        let d = dispBase ?? float(1);
+        if (dispScale) d = d.mul(dispScale);
+        if (dispBias) d = d.add(dispBias);
+        (material as any).displacementNode = d;
+      }
+      assignCombined('diffuse', 'color', 'colorNode', 3, null, 'vec4');
+      const opacityBase = getIf('opacity', 1, 'float');
+      const alphaMapNode = getIf('alphaMap', 1, 'float');
+      if (opacityBase && alphaMapNode) {
+        (material as any).opacityNode = varying(opacityBase.mul(alphaMapNode));
+      } else if (opacityBase) {
+        (material as any).opacityNode = varying(opacityBase);
+      }
       setIf('alphaTest', 'alphaTestNode', 1, 'float');
       setIf('depth', 'depthNode', 1, 'float');
-
-      // Standard/Physical
-      setIf('emissive', 'emissiveNode', null, 'color');
-      setIf('metalness', 'metalnessNode', 1, 'float');
-      setIf('roughness', 'roughnessNode', 1, 'float');
+      setIf('emissiveIntensity', 'emissiveIntensityNode', 1, 'float');
+      setIf('lightMapIntensity', 'lightMapIntensityNode', 1, 'float');
+      setIf('envMapIntensity', 'envMapIntensityNode', 1, 'float');
+      setIf('envMapRotation', 'envMapRotationNode', 3, 'vec3');
+      assignCombined('roughness', 'roughnessMap', 'roughnessNode', 1, 1, 'float');
+      assignCombined('metalness', 'metalnessMap', 'metalnessNode', 1, 1, 'float');
+      assignCombined('emissive', 'emissiveMap', 'emissiveNode', null, 3, 'color');
       setIf('clearcoat', 'clearcoatNode', 1, 'float');
       setIf('clearcoatRoughness', 'clearcoatRoughnessNode', 1, 'float');
       setIf('clearcoatNormal', 'clearcoatNormalNode', 3, 'vec3');
@@ -131,16 +194,14 @@ function patchNodeMaterial(batchedMesh: BatchedMesh): void {
       setIf('iridescence', 'iridescenceNode', 1, 'float');
       setIf('iridescenceIOR', 'iridescenceIORNode', 1, 'float');
       setIf('iridescenceThickness', 'iridescenceThicknessNode', 1, 'float');
-
-      // Phong
       setIf('shininess', 'shininessNode', 1, 'float');
       setIf('specular', 'specularNode', null, 'color');
       setIf('specularIntensity', 'specularIntensityNode', 1, 'float');
       setIf('specularColor', 'specularColorNode', null, 'color');
-
-      // Other useful
       setIf('normal', 'normalNode', 3, 'vec3');
-      setIf('ao', 'aoNode', 1, 'float');
+      setIf('normalScale', 'normalScaleNode', 2, 'vec2');
+      setIf('bumpScale', 'bumpScaleNode', 1, 'float');
+      assignCombined('ao', 'aoMap', 'aoNode', 1, 1, 'float');
     }
     return result;
   };
